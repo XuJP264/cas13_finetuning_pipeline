@@ -1,0 +1,54 @@
+seed: 1337
+
+paths:
+  sft_model: outputs/sft/smoke/best
+  reference_model: outputs/sft/smoke/best
+  prompts_file: data/processed/valid.jsonl
+  output_dir: outputs/rl/real_smoke
+  oracle_cache: outputs/rl/real_smoke/oracle_cache.sqlite
+
+generation:
+  num_samples: 2
+  prompt_length: 32
+  max_new_tokens: 32
+  temperature: 0.9
+  top_p: 0.95
+  batch_size: 1
+
+oracle:
+  mode: real_progen3
+  min_len: 200
+  max_len: 1500
+  progen3:
+    enabled: true
+    model_name: Profluent-Bio/progen3-219m
+    device: auto
+    max_length: 256
+    dtype: auto
+  esmfold:
+    enabled: false
+    device: auto
+    max_length: 500
+    score_every_n_steps: 1
+    top_k: 1
+    pdb_dir: outputs/rl/real_smoke/pdb
+
+reward:
+  w_pg3: 0.3
+  w_plddt: 0.4
+  w_valid: 0.2
+  w_motif: 0.1
+  w_kl: 0.0
+
+ppo:
+  use_trl: false
+  steps: 1
+  batch_size: 1
+  mini_batch_size: 1
+  learning_rate: 0.00001
+  gamma: 1.0
+  clip_range: 0.2
+  vf_coef: 0.1
+  entropy_coef: 0.01
+  log_every: 1
+  save_every: 1

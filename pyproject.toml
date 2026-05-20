@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cas13-ft-pipeline"
+version = "0.1.0"
+description = "Cas13 SFT and RL PPO training pipelines"
+requires-python = ">=3.9"
+dependencies = [
+  "torch",
+  "transformers",
+  "pyyaml",
+  "tqdm",
+  "pandas",
+  "numpy",
+  "tensorboard",
+  "accelerate>=0.26.0",
+]
+
+[project.optional-dependencies]
+rl = ["trl"]
+esmfold = ["fair-esm"]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

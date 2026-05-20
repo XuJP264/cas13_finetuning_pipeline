@@ -1,0 +1,40 @@
+seed: 1337
+
+paths:
+  raw_atlas: data/raw/crispr-cas-atlas-v1.0.json
+  checkpoint: data/raw/progen2-base-ft.ckpt
+  hf_config: data/raw/progen2-base-ft-config.json
+  processed_dir: data/processed
+  output_dir: outputs/sft
+  extracted_prefix: data/processed/cas13_sequences
+
+extract:
+  min_len: 200
+  max_len: 1500
+  keywords: ["Cas13", "cas13", "C2c2", "c2c2"]
+
+split:
+  train: 0.90
+  valid: 0.05
+  test: 0.05
+
+train:
+  model_name_or_path: null
+  tokenizer_name_or_path: null
+  train_file: data/processed/train.jsonl
+  valid_file: data/processed/valid.jsonl
+  max_length: 1024
+  batch_size: 1
+  eval_batch_size: 1
+  learning_rate: 0.00005
+  weight_decay: 0.01
+  num_train_epochs: 1
+  max_steps: -1
+  gradient_accumulation_steps: 8
+  fp16: false
+  bf16: false
+  logging_steps: 1
+  eval_steps: 100
+  save_steps: 500
+  resume_from_checkpoint: null
+  save_total_limit: 3
