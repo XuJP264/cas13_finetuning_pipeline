@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 import json
 import subprocess
@@ -29,7 +30,7 @@ def test_probe_script_handles_failed_sample_without_stopping(tmp_path):
             "--output",
             str(output_path),
         ],
-        cwd=str(tmp_path.parents[0]) if False else "/Users/bytedance/python_project",
+        cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
         check=True,
@@ -64,7 +65,7 @@ def test_probe_script_reads_fasta(tmp_path):
             "--limit",
             "1",
         ],
-        cwd="/Users/bytedance/python_project",
+        cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
         check=True,

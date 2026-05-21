@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 import json
 import subprocess
@@ -16,7 +17,7 @@ def test_reward_composer_probe_runs(tmp_path):
             "--output",
             str(output),
         ],
-        cwd="/Users/bytedance/python_project",
+        cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
         check=True,

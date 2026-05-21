@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 import json
 import subprocess
@@ -52,7 +53,7 @@ def test_score_candidates_oracle_cli_outputs_jsonl_and_summary(tmp_path):
             "--config",
             str(config),
         ],
-        cwd="/Users/bytedance/python_project",
+        cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
         check=True,
