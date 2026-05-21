@@ -2,47 +2,43 @@ seed: 1337
 runtime:
   mode: nscc
 paths:
-  train_data: data/processed/train.jsonl
+  train_data: data/processed/valid.jsonl
   policy_model: outputs/sft/formal/best
-  output_dir: outputs/rl/cas13_nscc
-  esmfold_cache: outputs/rl/cas13_nscc/esmfold_cache.sqlite
-  progen3_cache: outputs/rl/cas13_nscc/progen3_cache.sqlite
+  output_dir: outputs/rl/cas13_nscc_smoke
+  esmfold_cache: outputs/rl/cas13_nscc_smoke/esmfold_cache.sqlite
+  progen3_cache: outputs/rl/cas13_nscc_smoke/progen3_cache.sqlite
 generation:
-  prompt_length: 64
-  max_new_tokens: 512
+  prompt_length: 16
+  max_new_tokens: 32
+  do_sample: true
+  temperature: 0.9
+  top_p: 0.95
 training:
   mode: real_ppo
   device: cuda
-  steps: 1000
-  batch_size: 8
+  steps: 2
+  batch_size: 1
   learning_rate: 1.0e-6
   weight_decay: 0.0
   ppo_clip_range: 0.2
   kl_weight: 0.02
   max_grad_norm: 1.0
-  save_steps: 10
+  save_steps: 1
 oracle:
   esmfold:
-    mode: real
-    backend: facebook_esm
-    model_path: /path/to/esmfold
+    mode: mock
+    backend: mock
     device: cuda
-    cache_dir: /path/to/cache/esmfold
     max_length: 1500
   progen3:
-    mode: real
-    model_name_or_path: Profluent-Bio/progen3-3b
-    code_path: /path/to/progen3
+    mode: mock
     device: cuda
-    dtype: bfloat16
-    cache_dir: /path/to/cache/progen3
-    batch_size: 1
     max_length: 1024
 reward:
   eps: 1.0e-6
   reward_scale: 1.0
   invalid_reward: -1.0
-  min_len: 200
+  min_len: 50
   max_len: 1500
   length_center: 900
   length_tolerance: 700
@@ -63,8 +59,9 @@ reward:
     lm: 1.0
     plddt: 1.0
     ptm: 1.0
-    pae: 0.2
+    pae: 0.0
     hepn: 0.5
     length: 0.5
     diversity: 0.1
   kl_weight: 0.02
+

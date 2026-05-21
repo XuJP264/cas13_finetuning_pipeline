@@ -174,6 +174,26 @@ SHA256, records `struct/lm/motif/length/diversity/kl` reward components in
 `reward_components.jsonl`, and keeps resume state in `trainer_state.json`.
 NSCC mode checks CUDA, `nvidia-smi`, model paths, and data paths before training.
 
+Real PPO smoke and training entry points:
+
+```bash
+# Tiny NSCC smoke: loads a policy, generates, scores with mock oracles, computes KL,
+# performs PPO-style policy updates, and writes checkpoints.
+PYTHONPATH=src python3 scripts/12_train_rl_ppo.py \
+  --config configs/rl_cas13_nscc_smoke.yaml \
+  --max-steps 1
+
+# Full NSCC RL config after editing policy/oracle paths.
+PYTHONPATH=src python3 scripts/12_train_rl_ppo.py \
+  --config configs/rl_cas13_nscc.yaml \
+  --resume
+```
+
+Configs with `training.mode: real_ppo` use the real policy-update path in
+`cas13_rl.rl_trainer`: policy model loading, reference-model KL, sequence
+generation, reward composition, clipped PPO-style loss, checkpoint saving, and
+resume. Configs without that mode keep the local mock/debug path.
+
 ProGen3 real oracle deployment checks and acceptance probe:
 
 ```bash
