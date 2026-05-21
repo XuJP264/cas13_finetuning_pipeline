@@ -41,9 +41,6 @@ def validate_nscc_environment(config: Dict[str, Any]) -> None:
     oracle = config.get("oracle", {})
     _require_path("train_data", paths.get("train_data"))
     _require_path("policy_model", paths.get("policy_model"))
-    esm_cfg = oracle.get("esmfold", {})
-    if esm_cfg.get("mode") == "real":
-        _require_path("ESMFold model", esm_cfg.get("model_path"))
     progen_cfg = oracle.get("progen3", {})
     if progen_cfg.get("mode") == "real":
         progen_model = progen_cfg.get("model_name_or_path") or progen_cfg.get("model_path")
@@ -267,16 +264,21 @@ class Cas13RLTrainer:
             prompt = prompts[i % len(prompts)]
             prompt_ids = self._encode_prompt(tokenizer, prompt)
             input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
+            attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=device)
+            generate_kwargs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "max_new_tokens": int(self.generation.get("max_new_tokens", 128)),
+                "do_sample": bool(self.generation.get("do_sample", True)),
+                "temperature": float(self.generation.get("temperature", 0.9)),
+                "top_p": float(self.generation.get("top_p", 0.95)),
+                "pad_token_id": getattr(tokenizer, "pad_token_id", None) or getattr(tokenizer, "eos_token_id", None) or 0,
+                "eos_token_id": getattr(tokenizer, "eos_token_id", None),
+            }
+            if self.generation.get("min_new_tokens") is not None:
+                generate_kwargs["min_new_tokens"] = int(self.generation["min_new_tokens"])
             with torch.no_grad():
-                output = model.generate(
-                    input_ids=input_ids,
-                    max_new_tokens=int(self.generation.get("max_new_tokens", 128)),
-                    do_sample=bool(self.generation.get("do_sample", True)),
-                    temperature=float(self.generation.get("temperature", 0.9)),
-                    top_p=float(self.generation.get("top_p", 0.95)),
-                    pad_token_id=getattr(tokenizer, "pad_token_id", None) or getattr(tokenizer, "eos_token_id", None) or 0,
-                    eos_token_id=getattr(tokenizer, "eos_token_id", None),
-                )
+                output = model.generate(**generate_kwargs)
             ids = [int(x) for x in output[0].detach().cpu().tolist()]
             token_rows.append(ids)
             prompt_lengths.append(len(prompt_ids))

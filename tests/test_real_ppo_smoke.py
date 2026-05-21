@@ -66,3 +66,30 @@ def test_real_ppo_tiny_mock_oracle_checkpoint_and_resume(tmp_path):
     assert resumed[0]["resume_from_step"] == 1
     assert (tmp_path / "rl" / "checkpoint_step_2").exists()
 
+
+def test_mock_rl_smoke_generates_sequence_past_hard_filter(tmp_path):
+    cfg = _config(tmp_path)
+    cfg["training"] = {"mode": "mock_debug", "steps": 1, "batch_size": 1}
+    cfg["generation"] = {
+        "prompt_length": 8,
+        "min_new_tokens": 850,
+        "max_new_tokens": 900,
+        "target_min_len": 850,
+        "target_max_len": 1500,
+    }
+    cfg["reward"]["min_len"] = 850
+    cfg["reward"]["max_len"] = 1500
+
+    trainer = Cas13RLTrainer(cfg)
+    try:
+        trainer.run(max_steps=1)
+    finally:
+        trainer.close()
+
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "rl" / "reward_breakdown.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert rows[0]["sequence_length"] >= cfg["reward"]["min_len"]
+    assert rows[0]["sequence_length"] <= cfg["reward"]["max_len"]
+    assert rows[0]["invalid_reason"] is None

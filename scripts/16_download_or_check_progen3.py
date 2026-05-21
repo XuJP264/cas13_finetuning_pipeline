@@ -17,6 +17,18 @@ if str(_SRC_DIR) not in sys.path:
 from cas13_ft.config import load_yaml
 
 
+REQUIRED_PROGEN3_MODULES = ["progen3.batch_preparer", "progen3.modeling", "progen3.scorer"]
+REMOTE_CODE_NAMES = {
+    "configuration_progen3.py",
+    "configuration_progen.py",
+    "modeling_progen3.py",
+    "modeling_progen.py",
+    "tokenization_progen3.py",
+    "tokenization_progen.py",
+}
+MISSING_OFFICIAL_CODE_MESSAGE = "Missing ProGen3 official Python package/code; cannot real score."
+
+
 def looks_like_hf_repo_id(value: str | None) -> bool:
     return bool(value and "/" in value and not value.startswith("/") and not value.startswith("."))
 
@@ -32,20 +44,30 @@ def check_local_model(path: Path) -> dict:
     }
 
 
-def code_import_report(code_path: str | None) -> dict:
+def _resolve_code_candidates(code_path: str | None) -> list[Path]:
     candidates = []
     if code_path:
         root = Path(code_path).expanduser()
+        if not root.is_absolute():
+            root = (_REPO_ROOT / root).resolve()
         candidates.extend([root / "src", root])
-    candidates.append(Path("external/progen3/src"))
+    else:
+        candidates.append(_REPO_ROOT / "external/progen3/src")
+    return candidates
+
+
+def code_import_report(code_path: str | None) -> dict:
+    candidates = _resolve_code_candidates(code_path)
     report = {"checked_paths": [str(p) for p in candidates], "importable": False, "error": None}
+    if code_path and not any(path.exists() for path in candidates):
+        report["error"] = f"ProGen3 code_path does not exist: {code_path}. {MISSING_OFFICIAL_CODE_MESSAGE}"
+        return report
     old_path = list(sys.path)
     try:
-        for candidate in candidates:
+        for candidate in reversed(candidates):
             if candidate.exists():
                 sys.path.insert(0, str(candidate.resolve()))
-                break
-        for module in ["progen3.batch_preparer", "progen3.modeling", "progen3.scorer"]:
+        for module in REQUIRED_PROGEN3_MODULES:
             if importlib.util.find_spec(module) is None:
                 raise ImportError(f"cannot import {module}")
         report["importable"] = True
@@ -53,6 +75,19 @@ def code_import_report(code_path: str | None) -> dict:
         report["error"] = f"{type(exc).__name__}: {exc}"
     finally:
         sys.path = old_path
+    return report
+
+
+def remote_code_report(repo_id: str) -> dict:
+    report = {"checked": False, "has_remote_code": False, "files": [], "error": None}
+    try:
+        from huggingface_hub import list_repo_files
+
+        files = list_repo_files(repo_id=repo_id)
+        code_files = sorted(name for name in files if Path(name).name in REMOTE_CODE_NAMES)
+        report.update({"checked": True, "has_remote_code": bool(code_files), "files": code_files})
+    except Exception as exc:
+        report["error"] = f"{type(exc).__name__}: {exc}"
     return report
 
 
@@ -90,18 +125,35 @@ def main() -> None:
         "official_code": code_import_report(progen_cfg.get("code_path")),
     }
 
+    if progen_cfg.get("mode") == "mock":
+        report["model"] = {"type": "mock", "ok": True}
+        report["cuda"] = cuda_report(require_cuda=False)
+        report["ok"] = True
+        print(json.dumps(report, ensure_ascii=True, indent=2, sort_keys=True))
+        return
+
     if not model_name_or_path:
         report["model"] = {"ok": False, "error": "oracle.progen3.model_name_or_path or model_path is required"}
     elif looks_like_hf_repo_id(model_name_or_path):
-        report["model"] = {"type": "huggingface_repo", "repo_id": model_name_or_path, "ok": True}
+        remote_code = remote_code_report(model_name_or_path)
+        architecture_ok = bool(report["official_code"].get("importable") or remote_code.get("has_remote_code"))
+        report["model"] = {
+            "type": "huggingface_repo",
+            "repo_id": model_name_or_path,
+            "remote_code": remote_code,
+            "architecture_code_ok": architecture_ok,
+            "ok": architecture_ok,
+        }
+        if not architecture_ok:
+            report["model"]["error"] = MISSING_OFFICIAL_CODE_MESSAGE
         try:
             from huggingface_hub import snapshot_download
 
-            if args.download:
+            if args.download and architecture_ok:
                 local_dir = snapshot_download(repo_id=model_name_or_path, cache_dir=cache_dir)
                 report["model"]["snapshot_path"] = local_dir
                 report["model"].update(check_local_model(Path(local_dir)))
-            else:
+            elif not args.download:
                 report["model"]["hint"] = (
                     "Run with --download or rely on transformers.from_pretrained to populate the Hugging Face cache."
                 )

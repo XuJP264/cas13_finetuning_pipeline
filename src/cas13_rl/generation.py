@@ -48,9 +48,11 @@ def generate_policy_samples(
     for i in range(num_samples):
         prompt = prompts[i % len(prompts)]
         input_ids = torch.tensor([tokenizer.encode(prompt, add_special_tokens=False)], dtype=torch.long, device=device)
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=device)
         with torch.no_grad():
             output = model.generate(
                 input_ids=input_ids,
+                attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
                 do_sample=True,
                 temperature=temperature,

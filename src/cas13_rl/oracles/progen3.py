@@ -29,6 +29,16 @@ def resolve_dtype(dtype: str | None):
     return mapping[dtype]
 
 
+def _candidate_code_paths(code_path: str | None) -> list[Path]:
+    candidates: list[Path] = []
+    if code_path:
+        root = Path(code_path).expanduser()
+        candidates.extend([root / "src", root])
+    else:
+        candidates.append(Path("external/progen3/src"))
+    return candidates
+
+
 @dataclass
 class ProGen3Oracle:
     model_name: str = "Profluent-Bio/progen3-219m"
@@ -40,9 +50,16 @@ class ProGen3Oracle:
     def __post_init__(self) -> None:
         self.device = resolve_device(self.device)
         torch_dtype = resolve_dtype(self.dtype)
-        official_code = Path(self.code_path).expanduser() if self.code_path else Path("external/progen3/src")
-        if official_code.exists():
-            sys.path.insert(0, str(official_code.resolve()))
+        official_paths = [path for path in _candidate_code_paths(self.code_path) if path.exists()]
+        official_code = official_paths[0] if official_paths else None
+        if self.code_path and official_code is None:
+            raise RuntimeError(
+                f"ProGen3 code_path does not exist: {self.code_path}. "
+                "Missing ProGen3 official Python package/code; cannot real score."
+            )
+        if official_code is not None:
+            for path in reversed(official_paths):
+                sys.path.insert(0, str(path.resolve()))
             try:
                 from progen3.batch_preparer import ProGen3BatchPreparer  # type: ignore
                 from progen3.modeling import ProGen3ForCausalLM  # type: ignore

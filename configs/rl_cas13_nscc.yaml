@@ -9,7 +9,13 @@ paths:
   progen3_cache: outputs/rl/cas13_nscc/progen3_cache.sqlite
 generation:
   prompt_length: 64
-  max_new_tokens: 512
+  min_new_tokens: 850
+  max_new_tokens: 1400
+  target_min_len: 850
+  target_max_len: 1500
+  do_sample: true
+  temperature: 0.9
+  top_p: 0.95
 training:
   mode: real_ppo
   device: cuda
@@ -25,17 +31,14 @@ oracle:
   esmfold:
     mode: real
     backend: facebook_esm
-    model_path: /path/to/esmfold
     device: cuda
-    cache_dir: /path/to/cache/esmfold
     max_length: 1500
   progen3:
     mode: real
     model_name_or_path: Profluent-Bio/progen3-3b
-    code_path: /path/to/progen3
+    code_path: external/progen3/src
     device: cuda
     dtype: bfloat16
-    cache_dir: /path/to/cache/progen3
     batch_size: 1
     max_length: 1024
 reward:
