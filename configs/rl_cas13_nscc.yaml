@@ -16,27 +16,47 @@ training:
 oracle:
   esmfold:
     mode: real
+    backend: facebook_esm
     model_path: /path/to/esmfold
     device: cuda
+    cache_dir: /path/to/cache/esmfold
     max_length: 1500
   progen3:
     mode: real
-    model_path: /path/to/progen3
+    model_name_or_path: Profluent-Bio/progen3-3b
+    code_path: /path/to/progen3
     device: cuda
-    max_length: 1024
     dtype: bfloat16
+    cache_dir: /path/to/cache/progen3
+    batch_size: 1
+    max_length: 1024
 reward:
-  alpha: 0.5
-  beta: 0.25
+  eps: 1.0e-6
+  reward_scale: 1.0
+  invalid_reward: -1.0
   min_len: 200
   max_len: 1500
-  target_len: 900
+  length_center: 900
   length_tolerance: 700
+  calibration:
+    lm:
+      low: -5.0
+      high: -0.5
+    plddt:
+      low: 50.0
+      high: 90.0
+    ptm:
+      low: 0.2
+      high: 0.8
+    pae:
+      low: 5.0
+      high: 25.0
   weights:
-    w_struct: 0.4
-    w_lm: 0.3
-    w_motif: 0.1
-    w_len: 0.1
-    w_div: 0.1
-    w_kl: 0.02
-
+    lm: 1.0
+    plddt: 1.0
+    ptm: 1.0
+    pae: 0.2
+    hepn: 0.5
+    length: 0.5
+    diversity: 0.1
+  kl_weight: 0.02
