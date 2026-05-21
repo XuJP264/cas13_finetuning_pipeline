@@ -153,6 +153,27 @@ outputs/sft/formal/generated_samples/summary.json
 
 ## RL
 
+Cas13 RL engineering entry points:
+
+```bash
+# Mac debug: mock ESMFold/ProGen3, no CUDA dependency, writes reward components JSONL.
+PYTHONPATH=src python3 scripts/02_rl_debug_mac.py --config configs/rl_cas13_debug_mac.yaml
+
+# Resume Mac debug from outputs/rl/cas13_debug_mac/trainer_state.json.
+PYTHONPATH=src python3 scripts/02_rl_debug_mac.py --config configs/rl_cas13_debug_mac.yaml --resume
+
+# NSCC one-click shell launch. Edit model/data paths in configs/rl_cas13_nscc.yaml first.
+bash scripts/10_run_rl_nscc.sh configs/rl_cas13_nscc.yaml
+
+# NSCC SLURM launch.
+sbatch slurm/rl_cas13_a100.sbatch
+```
+
+The new RL path stores expensive oracle calls in SQLite caches keyed by sequence
+SHA256, records `struct/lm/motif/length/diversity/kl` reward components in
+`reward_components.jsonl`, and keeps resume state in `trainer_state.json`.
+NSCC mode checks CUDA, `nvidia-smi`, model paths, and data paths before training.
+
 Mock PPO command:
 
 ```bash

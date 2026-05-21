@@ -1,0 +1,39 @@
+seed: 1337
+runtime:
+  mode: mac
+paths:
+  train_data: data/processed/train.jsonl
+  policy_model: outputs/sft/formal/best
+  output_dir: outputs/rl/cas13_debug_mac
+  esmfold_cache: outputs/rl/cas13_debug_mac/esmfold_cache.sqlite
+  progen3_cache: outputs/rl/cas13_debug_mac/progen3_cache.sqlite
+generation:
+  prompt_length: 16
+  max_new_tokens: 64
+training:
+  steps: 2
+  batch_size: 4
+oracle:
+  esmfold:
+    mode: mock
+    device: cpu
+    max_length: 1500
+  progen3:
+    mode: mock
+    device: cpu
+    max_length: 1024
+reward:
+  alpha: 0.5
+  beta: 0.25
+  min_len: 50
+  max_len: 1500
+  target_len: 900
+  length_tolerance: 700
+  weights:
+    w_struct: 0.4
+    w_lm: 0.3
+    w_motif: 0.1
+    w_len: 0.1
+    w_div: 0.1
+    w_kl: 0.02
+
