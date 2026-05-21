@@ -174,6 +174,26 @@ SHA256, records `struct/lm/motif/length/diversity/kl` reward components in
 `reward_components.jsonl`, and keeps resume state in `trainer_state.json`.
 NSCC mode checks CUDA, `nvidia-smi`, model paths, and data paths before training.
 
+ProGen3 real oracle deployment checks and acceptance probe:
+
+```bash
+# Mac dry check: verifies config/model metadata and official-code imports when present.
+PYTHONPATH=src python scripts/16_download_or_check_progen3.py \
+  --config configs/rl_cas13_nscc.yaml
+
+# Optional Hugging Face cache population.
+PYTHONPATH=src python scripts/16_download_or_check_progen3.py \
+  --config configs/rl_cas13_nscc.yaml \
+  --download
+
+# NSCC acceptance: valid rows should contain mean_logprob and perplexity.
+PYTHONPATH=src python scripts/12_probe_progen3_likelihood.py \
+  --config configs/rl_cas13_nscc.yaml \
+  --input data/processed/valid_probe.fasta \
+  --output outputs/oracle_probe/progen3_probe.jsonl \
+  --limit 10
+```
+
 Mock PPO command:
 
 ```bash

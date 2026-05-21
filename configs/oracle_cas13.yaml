@@ -1,0 +1,67 @@
+hard_filters:
+  valid_amino_acids: true
+  length_range: [800, 1400]
+  require_two_hepn_rx4h: true
+  low_complexity_filter: true
+  low_complexity:
+    max_aa_fraction: 0.20
+    max_run: 8
+
+naturalness:
+  enabled: true
+  scorer: progen3
+  model_name: Profluent-Bio/progen3-1b
+  device: auto
+  dtype: auto
+  batch_size: 1
+  normalize:
+    mean: null
+    std: null
+    clip: [-3, 3]
+  use_cache: true
+
+esm2_pseudo_pll:
+  enabled: false
+  mode: disabled
+  model_name: facebook/esm2_t33_650M_UR50D
+
+cas13_identity:
+  enabled: true
+  mode: mock
+  model_path: null
+  normalize:
+    mean: 0.5
+    std: 0.25
+    clip: [-3, 3]
+
+structure:
+  enabled: false
+  mode: disabled
+  top_k: 32
+  esmfold_command: null
+  normalize:
+    ptm_mean: 0.5
+    ptm_std: 0.15
+    plddt_mean: 70.0
+    plddt_std: 10.0
+    clip: [-3, 3]
+  use_cache: true
+
+diversity:
+  enabled: true
+  mode: simple_hamming
+  reference_fasta: null
+
+reward:
+  weights:
+    naturalness: 0.20
+    cas13_identity: 0.25
+    structure: 0.25
+    hepn_position: 0.15
+    diversity: 0.15
+  hard_fail_reward: -10.0
+  clip_final_reward: [-5, 5]
+
+cache:
+  path: data/oracle_cache.sqlite
+

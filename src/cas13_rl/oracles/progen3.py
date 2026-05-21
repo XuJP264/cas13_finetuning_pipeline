@@ -35,11 +35,12 @@ class ProGen3Oracle:
     device: str = "auto"
     max_length: int = 1024
     dtype: str = "auto"
+    code_path: str | None = None
 
     def __post_init__(self) -> None:
         self.device = resolve_device(self.device)
         torch_dtype = resolve_dtype(self.dtype)
-        official_code = Path("external/progen3/src")
+        official_code = Path(self.code_path).expanduser() if self.code_path else Path("external/progen3/src")
         if official_code.exists():
             sys.path.insert(0, str(official_code.resolve()))
             try:
@@ -85,17 +86,24 @@ class ProGen3Oracle:
         if getattr(self, "official", False):
             try:
                 scores = self.scorer.score_batch(sequences=[text])
-                log_likelihood = float(scores["log_likelihood"][0])
-                ppl = float(scores["perplexity"][0])
+                if "mean_logprob" in scores:
+                    mean_logprob = float(scores["mean_logprob"][0])
+                elif "mean_log_likelihood" in scores:
+                    mean_logprob = float(scores["mean_log_likelihood"][0])
+                elif "normalized_log_likelihood" in scores:
+                    mean_logprob = float(scores["normalized_log_likelihood"][0])
+                else:
+                    mean_logprob = float(scores["log_likelihood"][0]) / max(1, len(text))
+                ppl = float(scores["perplexity"][0]) if "perplexity" in scores else float(math.exp(-mean_logprob))
             except Exception as exc:
                 raise RuntimeError(f"Official ProGen3 scoring failed: {type(exc).__name__}: {exc}") from exc
-            nll = -log_likelihood
+            nll = -mean_logprob
             return {
                 "sequence": text,
                 "progen3_nll": nll,
                 "progen3_perplexity": ppl,
-                "progen3_mean_logprob": log_likelihood,
-                "progen3_normalized_score": log_likelihood,
+                "progen3_mean_logprob": mean_logprob,
+                "progen3_normalized_score": mean_logprob,
             }
         encoded = self.tokenizer(
             text,

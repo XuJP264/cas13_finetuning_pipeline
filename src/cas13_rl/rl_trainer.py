@@ -21,6 +21,10 @@ def _require_path(label: str, path: str | None) -> None:
         raise FileNotFoundError(f"{label} path does not exist: {path}")
 
 
+def _looks_like_hf_repo_id(value: str | None) -> bool:
+    return bool(value and "/" in value and not value.startswith("/") and not value.startswith("."))
+
+
 def validate_nscc_environment(config: Dict[str, Any]) -> None:
     if shutil.which("nvidia-smi") is None:
         raise RuntimeError("NSCC mode requires nvidia-smi on PATH")
@@ -36,7 +40,12 @@ def validate_nscc_environment(config: Dict[str, Any]) -> None:
     _require_path("train_data", paths.get("train_data"))
     _require_path("policy_model", paths.get("policy_model"))
     _require_path("ESMFold model", oracle.get("esmfold", {}).get("model_path"))
-    _require_path("ProGen3 model", oracle.get("progen3", {}).get("model_path"))
+    progen_cfg = oracle.get("progen3", {})
+    progen_model = progen_cfg.get("model_name_or_path") or progen_cfg.get("model_path")
+    if not _looks_like_hf_repo_id(progen_model):
+        _require_path("ProGen3 model", progen_model)
+    if progen_cfg.get("code_path"):
+        _require_path("ProGen3 code", progen_cfg.get("code_path"))
 
 
 class Cas13RLTrainer:
@@ -50,7 +59,7 @@ class Cas13RLTrainer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.state_path = self.output_dir / "trainer_state.json"
         self.metrics_path = self.output_dir / "metrics.jsonl"
-        self.reward_log_path = self.output_dir / "reward_components.jsonl"
+        self.reward_log_path = self.output_dir / "reward_breakdown.jsonl"
         if config.get("runtime", {}).get("mode") == "nscc":
             validate_nscc_environment(config)
         self.esm_cache = OracleCache(self.paths.get("esmfold_cache", self.output_dir / "esmfold_cache.sqlite"))
@@ -80,6 +89,57 @@ class Cas13RLTrainer:
             return load_prompts(train_data, prompt_length=prompt_length)
         return ["M" * min(prompt_length, 16)]
 
+    def _basic_invalid_reason(self, sequence: str) -> str | None:
+        reward_cfg = self.config.get("reward", {})
+        min_len = int(reward_cfg.get("min_len", 200))
+        max_len = int(reward_cfg.get("max_len", 1500))
+        seq = str(sequence or "").upper()
+        canonical = set("ACDEFGHIKLMNPQRSTVWY")
+        if not seq:
+            return "empty sequence"
+        if any(ch not in canonical for ch in seq):
+            return "non-canonical amino acid"
+        if len(seq) < min_len or len(seq) > max_len:
+            return f"length {len(seq)} outside [{min_len}, {max_len}]"
+        return None
+
+    def _score_oracles_with_basic_gate(self, sequences: List[str]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        esm_rows: List[Dict[str, Any] | None] = [None] * len(sequences)
+        lm_rows: List[Dict[str, Any] | None] = [None] * len(sequences)
+        valid_indices: List[int] = []
+        valid_sequences: List[str] = []
+        for i, sequence in enumerate(sequences):
+            reason = self._basic_invalid_reason(sequence)
+            if reason:
+                esm_rows[i] = {
+                    "sequence": sequence,
+                    "valid": False,
+                    "mean_plddt": None,
+                    "ptm": None,
+                    "mean_pae": None,
+                    "pdb_path": None,
+                    "error": reason,
+                    "backend": self.oracle_cfg.get("esmfold", {}).get("mode", "mock"),
+                }
+                lm_rows[i] = {
+                    "sequence": sequence,
+                    "valid": False,
+                    "mean_logprob": None,
+                    "perplexity": None,
+                    "error": reason,
+                    "backend": self.oracle_cfg.get("progen3", {}).get("mode", "mock"),
+                }
+            else:
+                valid_indices.append(i)
+                valid_sequences.append(sequence)
+        if valid_sequences:
+            scored_esm = self.esmfold.score_many(valid_sequences)
+            scored_lm = self.progen3.score_many(valid_sequences)
+            for index, esm, lm in zip(valid_indices, scored_esm, scored_lm):
+                esm_rows[index] = esm
+                lm_rows[index] = lm
+        return [row for row in esm_rows if row is not None], [row for row in lm_rows if row is not None]
+
     def run(self, resume: bool = False, max_steps: int | None = None) -> List[Dict[str, Any]]:
         state = self._load_state(resume)
         start_step = int(state.get("step", 0)) if resume else 0
@@ -95,8 +155,7 @@ class Cas13RLTrainer:
                 seed=int(self.config.get("seed", 1337)) + step,
             )
             sequences = [row["sequence"] for row in samples]
-            esm_rows = self.esmfold.score_many(sequences)
-            lm_rows = self.progen3.score_many(sequences)
+            esm_rows, lm_rows = self._score_oracles_with_basic_gate(sequences)
             rewards = compute_cas13_rewards(
                 sequences,
                 esm_rows,
@@ -105,7 +164,8 @@ class Cas13RLTrainer:
                 log_path=self.reward_log_path,
                 kl_values=[0.0 for _ in sequences],
             )
-            reward_values = [float(row["reward"]) for row in rewards]
+            kl_weight = float(self.config.get("reward", {}).get("kl_weight", self.config.get("reward", {}).get("w_kl", 0.0)))
+            reward_values = [float(row["reward_for_rl"]) - kl_weight * 0.0 for row in rewards]
             valid_values = [1.0 if row["valid"] else 0.0 for row in rewards]
             metrics = {
                 "step": step + 1,
@@ -149,4 +209,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
