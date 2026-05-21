@@ -228,13 +228,32 @@ RUN_REAL_ORACLE_TESTS=1 PYTHONPATH=src python3 -m pytest tests/test_real_oracle_
 
 Mac/MPS is only a smoke/debug environment for this project. Full-length Cas13 SFT should run on NSCC or another Linux CUDA host with an A100-class GPU. GitHub should contain code, configs, tests, and docs only; do not commit Atlas JSON, processed splits, checkpoints, TensorBoard logs, or generated outputs.
 
+The main NSCC training dataset is `keyword_all_lengths`: Cas13/C2c2 keyword-only proteins, exact cleaned protein sequence deduplicated, with no extraction-stage length filter. Exact protein sequence deduplication is reasonable here because identical cleaned amino-acid sequences provide duplicate training targets even if they appear in multiple operons. Length filtering is intentionally not applied during extraction, because short/long records are useful audit signals and truncation should be measured at tokenization time rather than hidden upstream.
+
+Training uses `max_length=1536`. Sequences longer than that are truncated only by the tokenizer/trainer path, with EOS retained where possible, and `scripts/07_audit_sft_lengths_and_eos.py` reports the truncation ratio before training.
+
 Recommended repository flow:
 
 ```bash
 git status --short
-git add .gitignore README.md configs scripts src tests docs pyproject.toml setup.py setup.cfg
-git commit -m "Prepare Cas13 full-length SFT for NSCC A100"
+git add .gitignore README.md configs scripts src tests docs pyproject.toml setup.py setup.cfg requirements-nscc-cu121.txt
+git commit -m "Prepare Cas13 keyword all-length SFT for NSCC A100"
 git push origin main
+```
+
+Pinned NSCC dependency versions:
+
+```text
+python: 3.10 preferred; 3.13 is smoke/debug only
+torch: 2.5.1+cu121 or compatible CUDA 12.1 build
+transformers==4.49.0
+tokenizers==0.21.4
+huggingface-hub==0.36.1
+accelerate>=0.26.0
+safetensors
+tensorboard
+pytest
+pyyaml
 ```
 
 On NSCC:
@@ -242,66 +261,54 @@ On NSCC:
 ```bash
 git clone <YOUR_GITHUB_REPO_URL> cas13_ft_pipeline
 cd cas13_ft_pipeline
-conda create -n cas13-ft python=3.10 -y
-conda activate cas13-ft
-pip install -e .
-pip install torch --index-url https://download.pytorch.org/whl/cu121
-pip install transformers tensorboard pytest pyyaml safetensors
+bash scripts/nscc_one_click_prepare_and_submit.sh
 ```
 
-Download assets on NSCC. If compute nodes have no internet, run this on a login node or download locally and `rsync`:
+The one-click script creates `.venv`, installs pinned dependencies, downloads assets, builds the keyword-only all-length exact-dedup dataset, runs the audit, and submits the smoke PBS job with `qsub`.
+
+If compute nodes have no internet, download assets on a login node or download locally and `rsync`:
 
 ```bash
-PYTHONPATH=src python3 scripts/00_download_assets.py
+PYTHONPATH=src python scripts/00_download_assets.py
 shasum -a 256 data/raw/progen2-base-ft.ckpt data/raw/progen2-base-ft-config.json data/raw/crispr-cas-atlas-v1.0.json
 ```
 
-Full-length A100 config:
-
-```text
-configs/sft_full_length_a100.yaml
-```
-
-Key settings:
-
-```text
-max_length: 1536
-per_device_train_batch_size: 1
-gradient_accumulation_steps: 8
-bf16: true
-fp16: false
-gradient_checkpointing: true
-max_steps: 1000
-eval_steps/save_steps: 100
-output_dir: outputs/sft/full_length_a100
-```
-
-Before training, audit EOS and truncation:
+Keyword-only all-length extraction:
 
 ```bash
-PYTHONPATH=src python3 scripts/07_audit_sft_lengths_and_eos.py \
-  --config configs/sft_full_length_a100.yaml \
-  --out outputs/audits/sft_full_length_a100_truncation_eos_audit.json
+PYTHONPATH=src python scripts/02b_extract_cas13_keyword_all_lengths.py \
+  --atlas data/raw/crispr-cas-atlas-v1.0.json \
+  --out-dir data/processed/keyword_all_lengths
 ```
 
-Submit the Slurm job:
+Audit EOS and truncation:
 
 ```bash
-sbatch scripts/nscc_sft_full_length_a100.slurm
+PYTHONPATH=src python scripts/07_audit_sft_lengths_and_eos.py \
+  --config configs/sft_a100_keyword_all_lengths.yaml \
+  --out outputs/audits/a100_keyword_all_lengths_audit.json
+```
+
+Smoke job:
+
+```bash
+qsub scripts/nscc_a100_keyword_all_lengths_smoke.pbs
+qstat -u $USER
+tail -f outputs/sft/a100_keyword_all_lengths_smoke/logs/train_console.log
+```
+
+After smoke succeeds, submit the temporary 2-epoch A100 run:
+
+```bash
+qsub scripts/nscc_a100_keyword_all_lengths_2epoch.pbs
 ```
 
 Resume from a checkpoint if needed:
 
 ```bash
-PYTHONPATH=src python3 scripts/04_train_sft.py \
-  --config configs/sft_full_length_a100.yaml \
-  --resume-from-checkpoint outputs/sft/full_length_a100/checkpoint-500
-```
-
-Watch logs:
-
-```bash
-tail -f outputs/sft/full_length_a100/logs/train_console.log
+PYTHONPATH=src python scripts/04_train_sft.py \
+  --config configs/sft_a100_keyword_all_lengths.yaml \
+  --resume-from-checkpoint outputs/sft/a100_keyword_all_lengths/checkpoint-500
 ```
 
 TensorBoard from your laptop via SSH port forwarding:
@@ -309,8 +316,8 @@ TensorBoard from your laptop via SSH port forwarding:
 ```bash
 ssh -L 6006:127.0.0.1:6006 <user>@<nscc-login-host>
 cd cas13_ft_pipeline
-conda activate cas13-ft
-python3 -m tensorboard.main --logdir outputs/sft/full_length_a100/runs --host 127.0.0.1 --port 6006
+source .venv/bin/activate
+python -m tensorboard.main --logdir outputs/sft/a100_keyword_all_lengths/runs --host 127.0.0.1 --port 6006
 ```
 
-If the A100 40GB job OOMs, first reduce `max_length` from `1536` to `1280`; if needed increase `gradient_accumulation_steps` to `16`, keep `per_device_train_batch_size: 1`, keep `gradient_checkpointing: true`, and reduce eval batch size to `1`.
+If the A100 40GB job OOMs, first reduce `max_length` from `1536` to `1280`; if needed increase `gradient_accumulation_steps` to `16`, keep `per_device_train_batch_size: 1`, keep `gradient_checkpointing: false` for the current ProGen wrapper, and reduce eval batch size to `1`.

@@ -1,0 +1,49 @@
+seed: 42
+
+paths:
+  raw_dir: data/raw
+  raw_atlas: data/raw/crispr-cas-atlas-v1.0.json
+  checkpoint: data/raw/progen2-base-ft.ckpt
+  hf_config: data/raw/progen2-base-ft-config.json
+  processed_dir: data/processed/keyword_all_lengths
+  output_dir: outputs/sft/a100_keyword_all_lengths
+  extracted_prefix: data/processed/keyword_all_lengths/all
+
+extract:
+  dataset: keyword_all_lengths
+  dedup: exact
+
+split:
+  train: 0.90
+  valid: 0.05
+  test: 0.05
+
+train:
+  model_name_or_path: null
+  tokenizer_name_or_path: null
+  tokenizer_vocab_size: 32
+  train_file: data/processed/keyword_all_lengths/train.jsonl
+  valid_file: data/processed/keyword_all_lengths/valid.jsonl
+  test_file: data/processed/keyword_all_lengths/test.jsonl
+  append_eos: true
+  max_length: 1536
+  batch_size: 1
+  per_device_train_batch_size: 1
+  eval_batch_size: 1
+  per_device_eval_batch_size: 1
+  learning_rate: 0.00002
+  weight_decay: 0.01
+  num_train_epochs: 1
+  max_steps: 700
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: false
+  fp16: false
+  bf16: true
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 100
+  resume_from_checkpoint: null
+  save_total_limit: 3
+  report_to: tensorboard
+  logging_dir: outputs/sft/a100_keyword_all_lengths/runs
+  dataloader_pin_memory: true

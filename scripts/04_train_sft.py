@@ -60,11 +60,18 @@ def main() -> None:
         dtype = "bf16" if bf16 else "fp16" if fp16 else "fp32"
         train_trunc = train_ds.truncation_summary()
         valid_trunc = valid_ds.truncation_summary()
+        suggested_2epoch_steps = math.ceil(2 * len(train_ds) / train_cfg.get("gradient_accumulation_steps", 1))
         print(
             "SFT training setup: "
             f"device={device_name} dtype={dtype} max_length={max_length} "
             f"gradient_checkpointing={gradient_checkpointing} bf16={bf16} fp16={fp16} "
             f"append_eos={append_eos}"
+        )
+        print(
+            "SFT data sizing: "
+            f"train_size={len(train_ds)} valid_size={len(valid_ds)} "
+            f"gradient_accumulation_steps={train_cfg.get('gradient_accumulation_steps', 1)} "
+            f"suggested_2epoch_steps={suggested_2epoch_steps}"
         )
         print(
             "SFT truncation summary: "
@@ -91,7 +98,7 @@ def main() -> None:
             save_steps=train_cfg.get("save_steps", 500),
             eval_strategy="steps",
             save_strategy="steps",
-            report_to=["tensorboard"],
+            report_to=[train_cfg.get("report_to", "tensorboard")],
             save_total_limit=train_cfg.get("save_total_limit", 3),
             dataloader_pin_memory=train_cfg.get("dataloader_pin_memory", True),
             load_best_model_at_end=False,

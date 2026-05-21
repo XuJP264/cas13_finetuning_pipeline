@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List
+import warnings
 
 import torch
 from torch.utils.data import Dataset
@@ -21,7 +22,18 @@ class ProteinJsonlDataset(Dataset):
         return len(self.records)
 
     def __getitem__(self, idx: int) -> dict:
-        sequence = self.records[idx]["sequence"]
+        record = self.records[idx]
+        sequence = record.get("sequence")
+        if sequence is None:
+            sequence = record.get("protein")
+            warnings.warn(
+                f"{self.__class__.__name__} record {idx} is missing 'sequence'; falling back to 'protein'. "
+                "Please regenerate JSONL files with a canonical 'sequence' field.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        if sequence is None:
+            raise KeyError(f"Record {idx} has neither 'sequence' nor 'protein'")
         ids = self.tokenizer.encode(sequence, add_special_tokens=self.append_eos)
         raw_tokenized_length = len(ids)
         truncated = raw_tokenized_length > self.max_length
@@ -38,10 +50,12 @@ class ProteinJsonlDataset(Dataset):
         return {
             "input_ids": ids,
             "sequence": sequence,
+            "original_length": len(sequence),
             "raw_protein_length": len(sequence),
             "raw_tokenized_length": raw_tokenized_length,
             "tokenized_length": len(ids),
             "truncated": truncated,
+            "eos_in_input_ids": self.eos_token_id is not None and self.eos_token_id in ids,
             "has_eos": self.eos_token_id is not None and self.eos_token_id in ids,
         }
 
