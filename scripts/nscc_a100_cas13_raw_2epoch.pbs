@@ -1,0 +1,43 @@
+#!/bin/bash
+#PBS -q normal
+#PBS -P personal-xu0029ng
+#PBS -l select=1:ngpus=1
+#PBS -l walltime=12:00:00
+#PBS -N cas13_raw_2epoch
+#PBS -j oe
+
+set -euo pipefail
+
+cd "${PBS_O_WORKDIR:-$PWD}"
+source .venv/bin/activate
+export PYTHONPATH=src
+export TOKENIZERS_PARALLELISM=false
+
+CONFIG=configs/sft_a100_cas13_raw_2epoch.yaml
+OUTDIR=outputs/cas13_raw_2epoch
+
+mkdir -p "${OUTDIR}/logs" outputs/audits
+
+python - <<'PY'
+import torch
+print("torch", torch.__version__)
+print("cuda_available", torch.cuda.is_available())
+if torch.cuda.is_available():
+    print("gpu", torch.cuda.get_device_name(0))
+    print("bf16_supported", torch.cuda.is_bf16_supported())
+PY
+
+PYTHONPATH=src python scripts/07_audit_sft_lengths_and_eos.py \
+  --config "${CONFIG}" \
+  --out outputs/audits/cas13_raw_2epoch_audit.json
+
+PYTHONPATH=src python scripts/04_train_sft.py \
+  --config "${CONFIG}" \
+  2>&1 | tee "${OUTDIR}/logs/train_console.log"
+
+python3 scripts/plot_sft_curves.py --output_dir "${OUTDIR}"
+
+ls -lh "${OUTDIR}"
+find "${OUTDIR}" -maxdepth 1 -type d -name "checkpoint-*"
+cat "${OUTDIR}/trainer_state.json" | grep -E "best_model_checkpoint|best_metric"
+

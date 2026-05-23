@@ -1,0 +1,36 @@
+# RL smoke test configuration with mocks only (ProGen3 disabled, ESMFold mock)
+general:
+  output_dir: "outputs/rl/cas13_sft_best_mock_smoke"
+  seed: 42
+  max_steps: 100  # Can be overridden with CLI --max-steps
+
+policy:
+  model_path: "outputs/sft/cas13_11000_2epoch/best"
+  reference_model_path: "outputs/sft/cas13_11000_2epoch/best"
+
+oracles:
+  # ProGen3 explicitly disabled
+  progen3:
+    enabled: false
+    mode: "disabled"
+  
+  # ESMFold in mock mode
+  esmfold:
+    enabled: true
+    mode: "mock"
+    cache_dir: "outputs/rl/cas13_sft_best_mock_smoke"
+
+generation:
+  prompt_length: 64
+  min_new_tokens: 100  # Shorter for smoke test
+  max_new_tokens: 200
+  temperature: 0.9
+  top_p: 0.95
+  top_k: 50
+  repetition_penalty: 1.05
+
+ppo:
+  batch_size: 4
+  learning_rate: 1e-6
+  clip_range: 0.2
+  target_kl: 0.01

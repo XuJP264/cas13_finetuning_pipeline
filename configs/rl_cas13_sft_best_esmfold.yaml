@@ -1,0 +1,59 @@
+# Full RL training configuration with real ESMFold
+general:
+  output_dir: "outputs/rl/cas13_sft_best_esmfold"
+  seed: 42
+  max_steps: 1000
+
+# Sequence length constraints for Cas13 (900-1500 aa)
+sequence_constraints:
+  target_min_len: 900
+  target_max_len: 1500
+
+policy:
+  model_path: "outputs/sft/cas13_11000_2epoch/best"
+  reference_model_path: "outputs/sft/cas13_11000_2epoch/best"
+
+oracles:
+  # ProGen3 explicitly disabled
+  progen3:
+    enabled: false
+    mode: "disabled"
+  
+  # Production ESMFold configuration
+  esmfold:
+    enabled: true
+    mode: "real"
+    model: "facebook/esmfold_v1"
+    python: ".venv_oracle/bin/python"
+    script: "scripts/19_esmfold_batch_oracle.py"
+    cuda_visible_devices: "1"
+    device: "cuda:0"
+    chunk_size: 64
+    max_length: 1500
+    cache_dir: "outputs/rl/cas13_sft_best_esmfold"
+
+generation:
+  prompt_length: 64
+  min_new_tokens: 850
+  max_new_tokens: 1400
+  temperature: 0.9
+  top_p: 0.95
+  top_k: 50
+  repetition_penalty: 1.05
+
+ppo:
+  batch_size: 8
+  learning_rate: 1e-6
+  clip_range: 0.2
+  target_kl: 0.01
+  update_epochs: 4
+
+rewards:
+  # Reward weights matching the pipeline requirements
+  lm_reward_weight: 1.0
+  plddt_reward_weight: 2.0
+  ptm_reward_weight: 1.5
+  length_penalty_weight: 0.5
+  invalid_aa_penalty: 10.0
+  repetition_penalty_weight: 5.0
+  novelty_identity_penalty_weight: 0.1

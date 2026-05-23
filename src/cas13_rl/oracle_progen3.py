@@ -37,7 +37,7 @@ def _schema(sequence: str, payload: Dict[str, Any], backend: str) -> Dict[str, A
 
 @dataclass
 class ProGen3Oracle:
-    mode: str = "mock"
+    mode: str = "disabled"  # Default disabled per requirements
     model_path: str | None = None
     model_name_or_path: str | None = None
     code_path: str | None = None
@@ -52,30 +52,44 @@ class ProGen3Oracle:
         if self.cache is None and self.cache_dir:
             self.cache = OracleCache(Path(self.cache_dir) / "progen3_cache.sqlite")
         self._real = None
-        if self.mode == "mock":
-            return
-        model_name = self.model_name_or_path or self.model_path
-        if not model_name:
-            raise ValueError(
-                "ProGen3 real backend requires oracle.progen3.model_name_or_path "
-                "or oracle.progen3.model_path"
-            )
-        from .oracles.progen3 import ProGen3Oracle as RealProGen3Oracle
+        # Only enable if explicitly set to "real" - all other modes (mock, disabled) return mock/disabled scores
+        if self.mode == "real":
+            model_name = self.model_name_or_path or self.model_path
+            if not model_name:
+                raise ValueError(
+                    "ProGen3 real backend requires oracle.progen3.model_name_or_path "
+                    "or oracle.progen3.model_path"
+                )
+            from .oracles.progen3 import ProGen3Oracle as RealProGen3Oracle
 
-        self._real = RealProGen3Oracle(
-            model_name=model_name,
-            device=self.device,
-            max_length=self.max_length,
-            dtype=self.dtype,
-            code_path=self.code_path,
-        )
+            self._real = RealProGen3Oracle(
+                model_name=model_name,
+                device=self.device,
+                max_length=self.max_length,
+                dtype=self.dtype,
+                code_path=self.code_path,
+            )
 
     def score_one_uncached(self, sequence: str) -> Dict[str, Any]:
         seq = str(sequence or "")
         try:
-            if self.mode == "mock":
+            if self.mode == "disabled":
+                # ProGen3 is disabled - return explicit error
+                return {
+                    "sequence": seq,
+                    "valid": False,
+                    "mean_logprob": None,
+                    "perplexity": None,
+                    "error": "ProGen3 is disabled in this configuration",
+                    "backend": "disabled",
+                }
+            elif self.mode == "mock":
                 payload = _mock_lm_scores(seq)
+                return _schema(seq, payload, "mock")
             else:
+                # Only run real mode if explicitly enabled
+                if self._real is None:
+                    raise RuntimeError("ProGen3 real instance not initialized - check configuration")
                 raw = self._real.score_one(seq)
                 mean_logprob = float(raw.get("mean_logprob", raw.get("progen3_mean_logprob", 0.0)) or 0.0)
                 payload = {
@@ -85,16 +99,17 @@ class ProGen3Oracle:
                     "error": None,
                     "backend": "real",
                 }
-            payload["sequence"] = seq
-            return _schema(seq, payload, "mock" if self.mode == "mock" else "real")
+                payload["sequence"] = seq
+                return _schema(seq, payload, "real")
         except Exception as exc:
+            backend = "disabled" if self.mode == "disabled" else ("mock" if self.mode == "mock" else "real")
             return {
                 "sequence": seq,
                 "valid": False,
                 "mean_logprob": None,
                 "perplexity": None,
                 "error": f"{type(exc).__name__}: {exc}",
-                "backend": "mock" if self.mode == "mock" else "real",
+                "backend": backend,
             }
 
     def score_one(self, sequence: str) -> Dict[str, Any]:

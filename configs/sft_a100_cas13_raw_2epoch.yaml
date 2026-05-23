@@ -1,0 +1,61 @@
+seed: 42
+
+paths:
+  raw_dir: data/raw
+  raw_atlas: data/raw/crispr-cas-atlas-v1.0.json
+  checkpoint: data/raw/progen2-base-ft.ckpt
+  hf_config: data/raw/progen2-base-ft-config.json
+  processed_dir: data/processed
+  output_dir: outputs/cas13_raw_2epoch
+  extracted_prefix: data/processed/cas13_sequences
+  logging_dir: outputs/cas13_raw_2epoch/logs
+
+extract:
+  dataset: cas13_raw
+  min_len: 200
+  max_len: 1500
+  keywords: ["Cas13", "cas13", "C2c2", "c2c2"]
+
+split:
+  train: 0.90
+  valid: 0.05
+  test: 0.05
+
+train:
+  model_name_or_path: null
+  tokenizer_name_or_path: null
+  tokenizer_vocab_size: 32
+  train_file: data/processed/cas13_train.jsonl
+  valid_file: data/processed/cas13_valid.jsonl
+  test_file: data/processed/cas13_test.jsonl
+  append_eos: true
+  max_length: 1536
+  batch_size: 1
+  per_device_train_batch_size: 1
+  eval_batch_size: 1
+  per_device_eval_batch_size: 1
+  learning_rate: 2.0e-5
+  weight_decay: 0.01
+  num_train_epochs: 2
+  max_steps: -1
+  gradient_accumulation_steps: 8
+  gradient_checkpointing: false
+  fp16: false
+  bf16: true
+  logging_strategy: steps
+  logging_steps: 10
+  eval_strategy: steps
+  eval_steps: 100
+  save_strategy: steps
+  save_steps: 100
+  resume_from_checkpoint: null
+  save_total_limit: 5
+  load_best_model_at_end: true
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  report_to:
+    - tensorboard
+  run_name: cas13_raw_2epoch
+  logging_dir: outputs/cas13_raw_2epoch/logs
+  dataloader_pin_memory: true
+

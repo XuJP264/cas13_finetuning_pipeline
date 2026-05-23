@@ -1,0 +1,24 @@
+# SFT configuration for Cas13 11000 sequences, 2 epochs
+data:
+  train_path: "data/processed/cas13_11000/train.jsonl"
+  valid_path: "data/processed/cas13_11000/valid.jsonl"
+  test_path: "data/processed/cas13_11000/test.jsonl"
+
+model:
+  base_model_path: "data/raw/progen2-base-ft.ckpt"
+  config_path: "data/raw/progen2-base-ft-config.json"
+
+training:
+  epochs: 2
+  output_dir: "outputs/sft/cas13_11000_2epoch"
+  save_best_only: true
+  save_total_limit: 1
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+
+logging:
+  log_dir: "outputs/sft/cas13_11000_2epoch/logs"
+  logging_steps: 10
+  evaluation_strategy: "epoch"
+  save_strategy: "epoch"
+  load_best_model_at_end: true

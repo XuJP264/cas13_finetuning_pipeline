@@ -1,18 +1,29 @@
 # Cas13 FT Pipeline
 
-This repository contains a Cas13 SFT pipeline and an RL PPO scaffold with cached oracle scoring.
+This repository contains a Cas13 SFT pipeline and an RL PPO scaffold with cached oracle scoring. It has been updated to run on ByteDance Merlin/H100 nodes with a stable ESMFold-only RL pipeline (ProGen3 is currently disabled).
 
-## Current Machine Status
+## 2026 Update: Stable H100/Merlin Release
+
+**Important Updates:**
+1. **ProGen3 Disabled**: All ProGen3 integration has been disabled by default. RL v1 uses only:
+   - ESMFold structural oracle (facebook/esmfold_v1)
+   - SFT/reference LM reward
+   - Rule-based sequence penalties
+2. **GPU Isolation**: ESMFold runs in an isolated subprocess with dedicated GPU (defaults to physical GPU1, exposed as cuda:0 inside the subprocess) to prevent OOM issues
+3. **Full Cas13 Length Support**: Maintains full 900-1500 aa sequence lengths for Cas13, no longer truncating to 320 aa
+4. **11000 Sequence Dataset**: New dataset with 11000 raw Cas13 sequences from CRISPR-Cas Atlas, no deduplication, 90/5/5 train/valid/test split
+
+## Current Machine Status (MPS Mac)
 
 Run date: 2026-05-20. Machine has PyTorch 2.8.0 with MPS available and no CUDA GPU.
 
 - Mock tests: completed, `10 passed, 1 skipped`.
 - Real SFT smoke train: completed with the downloaded ProGen2 checkpoint and real Cas13 splits.
 - Formal SFT training: pending but runnable via `configs/sft_formal.yaml`.
-- ProGen3 real oracle: code path added, but not runnable on this machine. The official ProGen3 repo requires CUDA-class GPU dependencies such as `megablocks`/flash-attention; this MPS machine fails with `ModuleNotFoundError: megablocks`.
-- ESMFold real oracle: code path added, but not runnable on this machine. `fair-esm[esmfold]` installs most deps, but ESMFold still requires OpenFold; `pip install openfold` fails on this macOS/MPS environment.
+- ProGen3 real oracle: **DISABLED by default** - was never production-ready and has been removed from all active configs
+- ESMFold real oracle: code path updated for H100 compatibility, requires CUDA GPU to run
 - RL mock PPO: passed.
-- RL real PPO: pending CUDA validation; attempted on Mac and failed at ProGen3 load, without falling back to mock.
+- RL real PPO (ESMFold-only): validated on H100 with proper GPU isolation
 
 ## Assets
 
@@ -149,6 +160,57 @@ outputs/sft/formal/generated_samples/samples.jsonl
 outputs/sft/formal/generated_samples/samples.csv
 outputs/sft/formal/generated_samples/samples.fasta
 outputs/sft/formal/generated_samples/summary.json
+```
+
+## Cas13 Raw 2-Epoch SFT
+
+Raw-record SFT uses the Cas13 raw split files and keeps training at 2 epochs:
+
+```text
+configs/sft_a100_cas13_raw_2epoch.yaml
+data/processed/cas13_train.jsonl
+data/processed/cas13_valid.jsonl
+outputs/cas13_raw_2epoch
+```
+
+The config enables step-level training loss logs, periodic validation, periodic checkpoints, and best-checkpoint selection by `eval_loss`:
+
+```text
+logging_strategy: steps
+logging_steps: 10
+eval_strategy: steps
+eval_steps: 100
+save_strategy: steps
+save_steps: 100
+save_total_limit: 5
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false
+report_to: [tensorboard]
+logging_dir: outputs/cas13_raw_2epoch/logs
+```
+
+With the current local split (`5144` train records, `285` valid records), `per_device_train_batch_size=1`, `gradient_accumulation_steps=8`, `num_train_epochs=2`, and one GPU, the estimated optimizer steps are `1286`, so `eval_steps/save_steps=100` is appropriate. If the raw train split is replaced with about `11000` records, the same settings estimate about `2750` optimizer steps.
+
+Run on NSCC:
+
+```bash
+qsub scripts/nscc_a100_cas13_raw_2epoch.pbs
+```
+
+Run directly:
+
+```bash
+PYTHONPATH=src python3 scripts/04_train_sft.py --config configs/sft_a100_cas13_raw_2epoch.yaml
+python3 scripts/plot_sft_curves.py --output_dir outputs/cas13_raw_2epoch
+```
+
+After training, check:
+
+```bash
+find outputs/cas13_raw_2epoch -maxdepth 1 -type d -name "checkpoint-*"
+cat outputs/cas13_raw_2epoch/trainer_state.json | grep -E "best_model_checkpoint|best_metric"
+ls -lh outputs/cas13_raw_2epoch/loss_curve.csv outputs/cas13_raw_2epoch/loss_curve.png
 ```
 
 ## RL
